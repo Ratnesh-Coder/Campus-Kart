@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { auth, db, signInWithGoogle } from "./firebase";
+import { auth, db, signInWithGoogle, storage } from "./firebase";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const App = () => {
     const [user, setUser] = useState(null);
@@ -9,6 +10,10 @@ const App = () => {
     const [editing, setEditing] = useState(false);
     const [name, setName] = useState("");
     const [profilePic, setProfilePic] = useState("");
+    const [productName, setProductName] = useState("");
+    const [price, setPrice] = useState("");
+    const [image, setImage] = useState(null);
+    const [addingProduct, setAddingProduct] = useState(false);
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged(async (authUser) => {
@@ -34,7 +39,6 @@ const App = () => {
             }
             setLoading(false);
         });
-
         return () => unsubscribe();
     }, []);
 
@@ -50,60 +54,77 @@ const App = () => {
         setEditing(false);
     };
 
-    const handleProfilePicChange = (e) => {
+    const handleProfilePicChange = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setProfilePic(reader.result);
-            };
-            reader.readAsDataURL(file);
+            const storageRef = ref(storage, `profiles/${file.name}`);
+            await uploadBytes(storageRef, file);
+            const imageUrl = await getDownloadURL(storageRef);
+            setProfilePic(imageUrl);
         }
+    };
+
+    const handleAddProduct = async (e) => {
+        e.preventDefault();
+        if (!productName || !price || !image) {
+            alert("All fields are required!");
+            return;
+        }
+        setAddingProduct(true);
+        try {
+            const storageRef = ref(storage, `products/${image.name}`);
+            await uploadBytes(storageRef, image);
+            const imageUrl = await getDownloadURL(storageRef);
+            await addDoc(collection(db, "products"), {
+                name: productName,
+                price: parseFloat(price),
+                imageUrl,
+            });
+            alert("Product added successfully!");
+            setProductName("");
+            setPrice("");
+            setImage(null);
+        } catch (error) {
+            console.error("Error adding product:", error);
+            alert("Error adding product. Try again.");
+        }
+        setAddingProduct(false);
     };
 
     if (loading) return <h2 style={{ textAlign: "center", marginTop: "50px" }}>Loading user data...</h2>;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f4f4f4", padding: "20px" }}>
-            <h1 style={{ marginBottom: "20px", fontSize: "32px", fontWeight: "bold", color: "#2c3e50", textTransform: "uppercase", letterSpacing: "2px", textAlign: "center", backgroundColor: "#ecf0f1", padding: "10px 20px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" }}>Campus Kart</h1>
+            <h1 style={{ marginBottom: "20px", fontSize: "32px", fontWeight: "bold", color: "#2c3e50", textTransform: "uppercase", letterSpacing: "2px", textAlign: "center", backgroundColor: "#ecf0f1", padding: "10px 20px", borderRadius: "10px" }}>Campus Kart</h1>
             <div style={{ background: "white", padding: "20px", borderRadius: "10px", boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)", textAlign: "center", width: "320px" }}>
                 {user ? (
                     <>
-                        <div style={{ width: "130px", height: "130px", overflow: "hidden", borderRadius: "50%", margin: "0 auto 10px" }}>
-                            <img
-                                src={profilePic || user.profilePic}
-                                alt="Profile"
-                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                            />
-                        </div>
+                        <img src={profilePic || user.profilePic} alt="Profile" style={{ width: "100px", height: "100px", borderRadius: "50%", objectFit: "cover" }} />
                         {editing ? (
                             <>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
-                                />
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleProfilePicChange}
-                                    style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
-                                />
-                                <button onClick={handleEdit} style={{ width: "100%", padding: "8px", backgroundColor: "#4CAF50", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}>Save</button>
-                                <button onClick={() => setEditing(false)} style={{ width: "100%", padding: "8px", backgroundColor: "#ccc", color: "black", border: "none", borderRadius: "5px", cursor: "pointer", marginTop: "10px" }}>Back</button>
+                                <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+                                <input type="file" accept="image/*" onChange={handleProfilePicChange} />
+                                <button onClick={handleEdit}>Save</button>
+                                <button onClick={() => setEditing(false)}>Back</button>
                             </>
                         ) : (
                             <>
                                 <h2>{user.name}</h2>
                                 <p>{user.email}</p>
-                                <button onClick={() => setEditing(true)} style={{ width: "100%", padding: "8px", backgroundColor: "#ffcc00", color: "black", border: "none", borderRadius: "5px", cursor: "pointer", marginBottom: "10px" }}>Edit Profile</button>
-                                <button onClick={handleSignOut} style={{ width: "100%", padding: "8px", backgroundColor: "#f44336", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}>Sign Out</button>
+                                <button onClick={() => setEditing(true)}>Edit Profile</button>
+                                <button onClick={handleSignOut}>Sign Out</button>
                             </>
                         )}
+                        <h3>Add a Product</h3>
+                        <form onSubmit={handleAddProduct}>
+                            <input type="text" placeholder="Product Name" value={productName} onChange={(e) => setProductName(e.target.value)} required />
+                            <input type="number" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
+                            <input type="file" accept="image/*" onChange={(e) => setImage(e.target.files[0])} required />
+                            <button type="submit" disabled={addingProduct}>{addingProduct ? "Adding..." : "Add Product"}</button>
+                        </form>
                     </>
                 ) : (
-                    <button onClick={signInWithGoogle} style={{ width: "100%", padding: "10px", backgroundColor: "#4285F4", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}>Sign In with Google</button>
+                    <button onClick={signInWithGoogle}>Sign In with Google</button>
                 )}
             </div>
         </div>
