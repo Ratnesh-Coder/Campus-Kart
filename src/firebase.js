@@ -1,10 +1,8 @@
 // Import Firebase modules
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore"; // Import Firestore
-//import { getAuth, signOut } from "firebase/auth";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
-// Your Firebase config (replace with your actual Firebase config)
 const firebaseConfig = {
     apiKey:
     process.env.REACT_APP_FIREBASE_API_KEY,
@@ -33,8 +31,8 @@ export const signInWithGoogle = async () => {
         console.log("User signed in:", user);
         const userRef = doc(db, "users", user.uid);
         console.log("Checking Firestore for existing user...");
+
         // Check if the user already exists
-        
         const userDoc = await getDoc(userRef);
         if (userDoc.exists()) {
             console.log("User already exists in Firestore:", userDoc.data());
@@ -50,7 +48,7 @@ export const signInWithGoogle = async () => {
         }
 
     } catch (error) {
-        console.error("Error signing in:", error); // Fixed typo in error message
+        console.error("Error signing in:", error);
     }
 };
 
@@ -64,5 +62,21 @@ export const signOutUser = async () => {
     }
 };
 
+// Fetch user data from firestore
+export const fetchUserData = async (userID) => {
+    try {
+        const userRef = doc(db, "user", userID);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            return userSnap.data();
+        } else {
+            console.log("No user data found!");
+            return null;
+        }
+    } catch (error) {
+        console.error("Error fetching user data:", error);
+        return null;
+    }
+};
 export { auth, db };
 export default app;
